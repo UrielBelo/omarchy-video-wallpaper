@@ -1,0 +1,131 @@
+#!/bin/bash
+# Manage the mpvpaper animated video wallpaper. Theme-independent: the active
+# video (if any) is just a symlink at $STATE_LINK, same pattern Omarchy uses
+# for the static background (~/.local/state/omarchy/current/background).
+# Selected via omarchy-wallpaper-picker (SUPER+SHIFT+W) -- nothing here reacts
+# to theme changes, on purpose.
+set -euo pipefail
+
+STATE_LINK="$HOME/.local/state/omarchy/current/video-wallpaper"
+# cache=no + small demuxer buffers: mpv's default network-oriented cache
+# buffers tens of MB that a short, local, looping file never needs. Measured
+# ~210MB RSS -> ~185MB RSS across 3 monitors with these (a real, if modest,
+# saving) with no stutter across a full loop.
+MPV_OPTS="no-audio loop-playlist=inf hwdec=auto-safe panscan=1.0 cache=no demuxer-max-bytes=8MiB demuxer-max-back-bytes=4MiB vd-lavc-threads=2"
+REASSERT_LOCK="${XDG_RUNTIME_DIR:-/tmp}/omarchy-video-wallpaper-reassert.lock"
+
+current_video() {
+  # -e (not just checking readlink's exit status): readlink -f canonicalizes
+  # even a path that doesn't exist, so a removed/broken symlink would
+  # otherwise "resolve" to its own literal path instead of nothing.
+  [[ -e $STATE_LINK ]] && readlink -f "$STATE_LINK" 2>/dev/null
+  return 0
+}
+
+stop() {
+  pkill -x mpvpaper 2>/dev/null || true
+}
+
+start() {
+  local video
+  video=$(current_video)
+  [[ -n $video && -f $video ]] || return 0
+  pgrep -x mpvpaper >/dev/null 2>&1 && return 0
+  # 9>&-: when start() runs inside reassert()'s flock subshell, mpvpaper
+  # would otherwise inherit fd 9 and, being long-lived, hold the lock file
+  # open forever -- wedging every future reassert into an instant no-op.
+  nohup mpvpaper -o "$MPV_OPTS" "*" "$video" >/dev/null 2>&1 9>&- &
+  disown
+}
+
+# True if mpvpaper's layer is stacked above omarchy-background's on every
+# monitor where both appear (per `hyprctl layers`, later-listed = on top --
+# empirically verified: this is exactly the difference between a monitor
+# where the video shows and one where the shell's background hides it).
+mpvpaper_on_top() {
+  local mpv_pos="" bg_pos="" idx=0 ok=1
+  while IFS= read -r line; do
+    if [[ $line == Monitor* ]]; then
+      [[ -n $mpv_pos && -n $bg_pos && $bg_pos -gt $mpv_pos ]] && ok=0
+      mpv_pos=""
+      bg_pos=""
+    elif [[ $line == *"namespace: mpvpaper"* ]]; then
+      mpv_pos=$idx
+    elif [[ $line == *"namespace: omarchy-background"* ]]; then
+      bg_pos=$idx
+    fi
+    idx=$((idx + 1))
+  done < <(hyprctl layers 2>/dev/null)
+  [[ -n $mpv_pos && -n $bg_pos && $bg_pos -gt $mpv_pos ]] && ok=0
+  [[ $ok -eq 1 ]]
+}
+
+set_video() {
+  local video
+  video=$(realpath "$1")
+  [[ -f $video ]] || { echo "Not a file: $video" >&2; exit 1; }
+  mkdir -p "$(dirname "$STATE_LINK")"
+  ln -nsf "$video" "$STATE_LINK"
+  stop
+  sleep 0.3
+  start
+}
+
+clear_video() {
+  rm -f "$STATE_LINK"
+  stop
+}
+
+# Re-applies the currently selected video (no-op if none set). Any Hyprland
+# config reload -- a theme switch, hyprctl reload, a monitor being
+# added/removed -- can recreate the shell's background layer on some or all
+# outputs, on its own schedule; a single switch can trigger this twice
+# (Hyprland fires configreloaded twice per theme switch), and the shell's own
+# relayout can land after the first call's check already passed. So callers
+# queue on a *blocking* flock instead of skipping when busy: every trigger
+# gets its own fresh check-and-fix pass once the previous one is done,
+# instead of one being dropped right before the disruption it would have
+# caught. Each pass keeps checking (via mpvpaper_on_top) for a stretch of
+# consecutive good checks -- not just one -- restarting mpvpaper the moment a
+# check fails, instead of guessing a fixed delay a late relayout can beat.
+reassert() {
+  local video
+  video=$(current_video)
+  [[ -n $video && -f $video ]] || return 0
+
+  (
+    flock -w 30 9 || exit 0
+    stop
+    sleep 0.4
+    start
+
+    local ok_streak=0 i
+    for i in $(seq 1 24); do
+      sleep 0.5
+      if mpvpaper_on_top; then
+        ok_streak=$((ok_streak + 1))
+        (( ok_streak >= 4 )) && break
+      else
+        ok_streak=0
+        stop
+        sleep 0.3
+        start
+      fi
+    done
+  ) 9>"$REASSERT_LOCK"
+}
+
+case "${1:-}" in
+  set)
+    [[ -n "${2:-}" ]] || { echo "Usage: $(basename "$0") set <video>" >&2; exit 1; }
+    set_video "$2"
+    ;;
+  stop) clear_video ;;
+  start) start ;;
+  reassert) reassert ;;
+  current) current_video ;;
+  *)
+    echo "Usage: $(basename "$0") set <video>|stop|start|reassert|current" >&2
+    exit 1
+    ;;
+esac

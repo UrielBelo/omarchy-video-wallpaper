@@ -1,0 +1,15 @@
+#!/bin/bash
+# Watches ~/.config/omarchy/videos and regenerates thumbnails whenever it
+# changes, so dropping an mp4 in there is all it takes for it to show up in
+# the wallpaper picker (SUPER+SHIFT+W) -- no manual step needed.
+set -euo pipefail
+
+VIDEOS_DIR="$HOME/.config/omarchy/videos"
+mkdir -p "$VIDEOS_DIR"
+
+omarchy-video-wallpaper-thumbs
+
+inotifywait -m -q -e create -e delete -e moved_to -e moved_from -e close_write --format '%f' "$VIDEOS_DIR" |
+while read -r _; do
+  omarchy-video-wallpaper-thumbs
+done

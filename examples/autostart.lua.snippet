@@ -1,0 +1,12 @@
+-- Add to ~/.config/hypr/autostart.lua
+
+-- Starts whichever video was last picked, if any (no-op otherwise).
+o.launch_on_start("omarchy-video-wallpaper start")
+
+-- Watches ~/.config/omarchy/videos and regenerates thumbnails as you drop
+-- mp4s in, so they show up in the picker without a manual step.
+o.launch_on_start("omarchy-video-wallpaper-watch")
+
+-- Keeps the video on top across theme switches, hyprctl reload, and any
+-- other Hyprland config reload.
+o.launch_on_start("omarchy-video-wallpaper-reload-watch")

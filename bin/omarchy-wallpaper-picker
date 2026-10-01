@@ -1,0 +1,43 @@
+#!/bin/bash
+# Unified wallpaper picker (SUPER+SHIFT+W): shows the current theme's static
+# backgrounds together with the animated video wallpapers dropped into
+# ~/.config/omarchy/videos, in the same grid picker Omarchy itself uses for
+# backgrounds (omarchy-menu-images). Independent of theme -- available
+# whichever theme is active, and switching theme never touches this choice.
+set -euo pipefail
+
+VIDEOS_DIR="$HOME/.config/omarchy/videos"
+THUMBS_DIR="$HOME/.cache/omarchy/video-wallpaper-thumbs"
+
+omarchy-video-wallpaper-thumbs
+
+theme_name=$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null)
+current_background=$(readlink -f "$HOME/.local/state/omarchy/current/background" 2>/dev/null)
+current_video=$(omarchy-video-wallpaper current)
+
+if [[ -n $current_video ]]; then
+  selected="$THUMBS_DIR/$(basename "${current_video%.*}").jpg"
+else
+  selected="$current_background"
+fi
+
+choice=$(omarchy-menu-images \
+  --selected "$selected" \
+  "$HOME/.local/state/omarchy/current/theme/backgrounds" \
+  "$HOME/.config/omarchy/backgrounds/$theme_name" \
+  "$THUMBS_DIR") || exit 0
+
+[[ -n $choice ]] || exit 0
+
+if [[ $(dirname "$choice") == "$THUMBS_DIR" ]]; then
+  base=$(basename "$choice")
+  video="$VIDEOS_DIR/${base%.jpg}.mp4"
+  if [[ -f $video ]]; then
+    omarchy-video-wallpaper set "$video"
+  else
+    omarchy-notification-send "Wallpaper animado" "Vídeo não encontrado: $video" -u critical
+  fi
+else
+  omarchy-video-wallpaper stop
+  omarchy-theme-bg-set "$choice"
+fi

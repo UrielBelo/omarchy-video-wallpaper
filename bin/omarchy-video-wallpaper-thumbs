@@ -1,0 +1,46 @@
+#!/bin/bash
+# (Re)generates a JPG thumbnail for each video in VIDEOS_DIR and removes
+# thumbnails for videos that no longer exist. Idempotent -- skips videos
+# whose thumbnail is already newer. Called by the picker (just in case) and
+# by omarchy-video-wallpaper-watch whenever the folder changes.
+set -euo pipefail
+
+VIDEOS_DIR="$HOME/.config/omarchy/videos"
+THUMBS_DIR="$HOME/.cache/omarchy/video-wallpaper-thumbs"
+
+mkdir -p "$VIDEOS_DIR" "$THUMBS_DIR"
+
+shopt -s nullglob nocaseglob
+videos=("$VIDEOS_DIR"/*.mp4 "$VIDEOS_DIR"/*.webm "$VIDEOS_DIR"/*.mkv)
+shopt -u nullglob nocaseglob
+
+declare -A wanted
+
+for video in "${videos[@]}"; do
+  base=$(basename "$video")
+  thumb="$THUMBS_DIR/${base%.*}.jpg"
+  wanted["$thumb"]=1
+
+  if [[ -f $thumb && $thumb -nt $video ]]; then
+    continue
+  fi
+
+  duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$video" 2>/dev/null || true)
+  seek="1"
+  if [[ -n $duration ]]; then
+    seek=$(awk -v d="$duration" 'BEGIN { s = d * 0.15; if (s < 0.1) s = 0.1; printf "%.2f", s }')
+  fi
+
+  tmp="$thumb.$$.jpg"
+  if ffmpeg -y -ss "$seek" -i "$video" -frames:v 1 -q:v 3 "$tmp" </dev/null >/dev/null 2>&1; then
+    mv -f "$tmp" "$thumb"
+  else
+    rm -f "$tmp"
+  fi
+done
+
+shopt -s nullglob
+for thumb in "$THUMBS_DIR"/*.jpg; do
+  [[ -n "${wanted[$thumb]:-}" ]] || rm -f "$thumb"
+done
+shopt -u nullglob

@@ -1,0 +1,25 @@
+#!/bin/bash
+# Watches Hyprland's IPC event stream and re-asserts the video wallpaper on
+# top after every config reload (theme switch, `hyprctl reload`, a monitor
+# being added/removed, ...).
+#
+# Omarchy's own shell tears down and recreates its background layer on each
+# output as part of reacting to these reloads, independently of this script.
+# If that recreation lands after mpvpaper last mapped its own layer, the
+# shell's freshly reopened background layer ends up stacked on top, hiding
+# the video even though mpvpaper keeps running underneath. There's no event
+# to wait on for "the shell is done", so this just re-triggers
+# omarchy-video-wallpaper's own check-and-fix loop (see `reassert` in that
+# script) on every reload and lets it figure out the rest.
+set -euo pipefail
+
+SOCKET="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+
+while read -r event; do
+  case "$event" in
+    configreloaded\>\>*)
+      (omarchy-video-wallpaper reassert) >/dev/null 2>&1 &
+      disown
+      ;;
+  esac
+done < <(socat -U - "UNIX-CONNECT:$SOCKET")
