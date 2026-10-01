@@ -6,10 +6,12 @@ regular images and looping mp4s side by side, switch between them with one
 keybinding, and drop new videos into a watched folder without touching a
 config file.
 
-Not a Quickshell/Quattro plugin — it's a handful of shell scripts plus a
-keybinding, built on top of [`mpvpaper`](https://github.com/GhostNaN/mpvpaper)
-and your window manager, not on the Omarchy shell's plugin runtime. See
-[How it works](#how-it-works) if you're curious why.
+Mostly a handful of shell scripts plus a keybinding, built on top of
+[`mpvpaper`](https://github.com/GhostNaN/mpvpaper) and Hyprland — not on the
+Omarchy shell's plugin runtime. See [How it works](#how-it-works) if you're
+curious why. A thin Quattro bar-widget is included too, for a clickable bar
+icon that opens the same picker; it's optional and doesn't replace the
+scripts below (see [Optional: bar icon](#optional-bar-icon-quattro-plugin)).
 
 ## Credit
 
@@ -48,7 +50,7 @@ works, from anywhere.
 ## Install
 
 ```bash
-git clone https://github.com/<your-username>/omarchy-video-wallpaper.git
+git clone https://github.com/UrielBelo/omarchy-video-wallpaper.git
 cd omarchy-video-wallpaper
 ./install.sh
 ```
@@ -76,6 +78,23 @@ looping across every connected monitor.
 
 Add more videos any time by copying them into
 `~/.config/omarchy/videos/` — no restart needed.
+
+## Optional: bar icon (Quattro plugin)
+
+`manifest.json` + `BarWidget.qml` at the repo root make this installable as
+an Omarchy shell plugin too — adds a 🎬 icon to the bar that opens the same
+picker on click (`omarchy plugin add <this-repo-url>`, then
+`omarchy plugin enable io.github.urielbelo.video-wallpaper`; rename the ID in
+`manifest.json` first if you fork this).
+
+This is a convenience trigger only — it does **not** replace the setup
+above. The bar icon just runs the bundled `omarchy-wallpaper-picker`; the
+daemons that start your video at login, pick up new files, and keep it on
+top across reloads still come from `install.sh` + the autostart lines. An
+earlier version tried to own all of that from inside a Quattro `service`
+plugin kind, but third-party services didn't get activated reliably in
+testing (the `bar-widget` kind works fine — it's specifically `service` that
+didn't). If you figure out what's missing there, a PR is very welcome.
 
 ## How it works
 

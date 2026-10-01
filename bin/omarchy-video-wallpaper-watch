@@ -4,12 +4,13 @@
 # the wallpaper picker (SUPER+SHIFT+W) -- no manual step needed.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VIDEOS_DIR="$HOME/.config/omarchy/videos"
 mkdir -p "$VIDEOS_DIR"
 
-omarchy-video-wallpaper-thumbs
+"$SCRIPT_DIR/omarchy-video-wallpaper-thumbs"
 
 inotifywait -m -q -e create -e delete -e moved_to -e moved_from -e close_write --format '%f' "$VIDEOS_DIR" |
 while read -r _; do
-  omarchy-video-wallpaper-thumbs
+  "$SCRIPT_DIR/omarchy-video-wallpaper-thumbs"
 done

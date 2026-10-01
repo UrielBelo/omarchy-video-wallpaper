@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.urielbelo.video-wallpaper",
+  "name": "Video Wallpaper",
+  "version": "1.0.0",
+  "author": "Uriel Belo",
+  "license": "MIT",
+  "description": "Opens a picker mixing static backgrounds with animated video wallpapers (powered by mpvpaper). Requires the companion install.sh setup for the background daemons -- see the plugin README.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Video Wallpaper",
+    "description": "Opens the video wallpaper picker",
+    "category": "Appearance",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
