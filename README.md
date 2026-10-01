@@ -49,24 +49,77 @@ works, from anywhere.
 
 ## Install
 
+### 1. Dependencies
+
+```bash
+yay -S mpvpaper                                 # AUR
+sudo pacman -S inotify-tools socat ffmpeg       # official repos
+```
+
+### 2. Get the scripts
+
 ```bash
 git clone https://github.com/UrielBelo/omarchy-video-wallpaper.git
 cd omarchy-video-wallpaper
 ./install.sh
 ```
 
-Then, by hand (the installer doesn't touch your Hyprland config for you):
+This copies the five `bin/omarchy-*` scripts to `~/.local/bin/` and creates
+`~/.config/omarchy/videos/`. Verify:
 
-1. Add the three `o.launch_on_start(...)` lines from
+```bash
+command -v omarchy-video-wallpaper && echo ok
+```
+
+### 3. Wire it into Hyprland
+
+The installer doesn't touch your Hyprland config — add these yourself:
+
+1. **Autostart** — append the three `o.launch_on_start(...)` lines from
    [`examples/autostart.lua.snippet`](examples/autostart.lua.snippet) to
-   `~/.config/hypr/autostart.lua`.
-2. Add a keybinding from
+   `~/.config/hypr/autostart.lua`. These start the service, the folder
+   watcher, and the reload watcher at login.
+2. **Keybinding** — append a binding from
    [`examples/bindings.lua.snippet`](examples/bindings.lua.snippet) to
-   `~/.config/hypr/bindings.lua` — any free key combo works, it's just a
-   normal `o.bind(...)` call.
-3. `hyprctl reload`, log out and back in (autostart only runs at Hyprland
-   start), then drop a video into `~/.config/omarchy/videos/` and press your
-   bound key.
+   `~/.config/hypr/bindings.lua`. Any free key combo works; the snippet uses
+   `SUPER + SHIFT + W` and shows how to free it up first if you want that
+   exact one (it's bound to Omawrite by default on a stock install).
+3. Reload Hyprland so the new bindings take effect:
+   ```bash
+   hyprctl reload
+   ```
+   Autostart only runs when Hyprland itself starts, so the three
+   `launch_on_start` entries need a full logout/login (or a reboot) to take
+   effect the first time.
+
+### 4. First run
+
+1. Drop a video into the watched folder:
+   ```bash
+   cp /path/to/some-video.mp4 ~/.config/omarchy/videos/
+   ```
+2. Press your bound key. The picker should open showing your current theme's
+   static backgrounds plus a thumbnail for the video you just copied
+   (thumbnail generation takes a couple of seconds on the first drop).
+3. Click the video thumbnail. It should start looping across every connected
+   monitor within a second or two.
+
+If the thumbnail never appears, check that the watcher is actually running:
+`pgrep -af omarchy-video-wallpaper-watch` (empty output means step 3 above
+didn't take effect yet — re-check autostart.lua and that you've logged out
+and back in since editing it).
+
+### Uninstall
+
+```bash
+omarchy-video-wallpaper stop
+rm ~/.local/bin/omarchy-video-wallpaper ~/.local/bin/omarchy-video-wallpaper-* ~/.local/bin/omarchy-wallpaper-picker
+```
+
+Then remove the lines you added to `autostart.lua` and `bindings.lua`, and
+delete `~/.config/omarchy/videos/` and
+`~/.cache/omarchy/video-wallpaper-thumbs/` if you don't want to keep the
+videos/thumbnails around.
 
 ## Usage
 
@@ -94,7 +147,10 @@ top across reloads still come from `install.sh` + the autostart lines. An
 earlier version tried to own all of that from inside a Quattro `service`
 plugin kind, but third-party services didn't get activated reliably in
 testing (the `bar-widget` kind works fine — it's specifically `service` that
-didn't). If you figure out what's missing there, a PR is very welcome.
+didn't).
+
+**The click doesn't currently work** — see [Known issues](#known-issues)
+below. Use the keybinding in the meantime.
 
 ## How it works
 
@@ -133,13 +189,40 @@ active static background: a symlink, at
 | `omarchy-video-wallpaper-reload-watch` | Watches Hyprland's IPC socket and calls `reassert` after every config reload. |
 | `omarchy-wallpaper-picker` | The picker itself: merges static backgrounds and video thumbnails in one `omarchy-menu-images` call, and applies whichever you pick. |
 
-## Known limitation
+## Troubleshooting
 
-The reassert loop is a mitigation for a real stacking race, not a guarantee
-— on an unusually slow reload it could in theory still lose. In practice,
-across repeated testing (multiple theme switches back to back, with a
-third/headless monitor being added and removed), it has reliably landed the
-video on top within a few seconds every time.
+- **Video doesn't start**: check `omarchy-video-wallpaper current` (prints
+  the active video path, or nothing). If it prints a path but nothing is
+  playing, run `omarchy-video-wallpaper start` by hand and read its output;
+  `pgrep -x mpvpaper` should show one process afterward.
+- **Video is hidden behind the static background** after a theme switch or
+  reload: confirm `omarchy-video-wallpaper-reload-watch` is running
+  (`pgrep -af omarchy-video-wallpaper-reload-watch`). If it's not, re-check
+  the autostart.lua lines and log out/in once.
+- **New video doesn't show up in the picker**: confirm
+  `omarchy-video-wallpaper-watch` is running the same way; its only job is
+  regenerating thumbnails when the folder changes. You can also force a
+  refresh by hand: `omarchy-video-wallpaper-thumbs`.
+- **`mpvpaper: command not found`**: it's AUR-only, not in the official
+  repos — `yay -S mpvpaper`.
+
+## Known issues
+
+- **Reassert is a mitigation, not a guarantee.** The stacking race described
+  above (video vs. Omarchy's background layer) is resolved by re-checking and
+  retrying for a few seconds after every reload, not by an actual fix to the
+  underlying race. On an unusually slow reload it could in theory still lose.
+  In practice, across repeated testing (multiple theme switches back to back,
+  with a third/headless monitor being added and removed), it has reliably
+  landed the video on top within a few seconds every time.
+- **The bar-widget's click doesn't fire.** The Quattro plugin (see above)
+  loads with no errors and the icon renders in the bar, but clicking it does
+  not currently trigger `WidgetButton`'s `onPressed` in testing — the
+  manifest, path resolution, and `bar.run()` call all check out against the
+  official reference, so this looks like a Quattro-side quirk specific to
+  third-party `bar-widget` click handling rather than a bug in this plugin.
+  Until it's resolved, use the keybinding (step 3 above) instead of the bar
+  icon. A PR is very welcome if you track it down.
 
 ## License
 
